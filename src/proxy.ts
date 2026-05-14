@@ -20,10 +20,10 @@ function matchesRoutes(pathname: string, routes: string[]): boolean {
   return routes.some((r) => pathname.startsWith(r));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Fast cookie check — no DB call in middleware
+  // Fast cookie check — no DB call in proxy
   const sessionCookie = getSessionCookie(request);
   const isAuthenticated = !!sessionCookie;
 
