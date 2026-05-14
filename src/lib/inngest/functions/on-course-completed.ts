@@ -4,7 +4,6 @@ import { certificates } from "@/lib/db/schema/certificates";
 import { courses } from "@/lib/db/schema/courses";
 import { users } from "@/lib/db/schema/users";
 import { sendEmail, emailTemplates } from "@/lib/email";
-import { bunny } from "@/lib/bunny";
 import { eq } from "drizzle-orm";
 
 function generateCertificateNumber(): string {
@@ -14,12 +13,18 @@ function generateCertificateNumber(): string {
 }
 
 export const onCourseCompleted = inngest.createFunction(
-  { id: "on-course-completed", name: "Issue Certificate on Course Completion" },
-  { event: "course/completed" },
+  {
+    id: "on-course-completed",
+    name: "Issue Certificate on Course Completion",
+    triggers: [{ event: "course/completed" as const }],
+  },
   async ({ event, step }) => {
-    const { userId, courseId } = event.data;
+    const { userId, courseId } = event.data as {
+      userId: string;
+      courseId: string;
+      enrollmentId: string;
+    };
 
-    // Generate and store the certificate record first
     const certificate = await step.run("create-certificate-record", async () => {
       const id = crypto.randomUUID();
       const certificateNumber = generateCertificateNumber();
@@ -34,25 +39,13 @@ export const onCourseCompleted = inngest.createFunction(
     });
 
     if (!certificate) {
-      // Certificate already issued for this user+course — skip
       return { skipped: true };
     }
 
-    // Generate the PDF certificate (placeholder — add @react-pdf/renderer template)
-    // const pdfBuffer = await step.run("generate-pdf", async () => {
-    //   return generateCertificatePdf({ ... });
-    // });
+    // TODO: Generate PDF with @react-pdf/renderer and upload to Bunny.net CDN
+    // const pdfBuffer = await step.run("generate-pdf", () => generateCertificatePdf(...));
+    // const pdfUrl = await step.run("upload-pdf", () => bunny.uploadToStorage(...));
 
-    // Upload PDF to Bunny.net CDN
-    // const pdfUrl = await step.run("upload-pdf", async () => {
-    //   return bunny.uploadToStorage(
-    //     `certificates/${certificate.certificateNumber}.pdf`,
-    //     pdfBuffer,
-    //     "application/pdf"
-    //   );
-    // });
-
-    // Send certificate email
     await step.run("send-certificate-email", async () => {
       const [user] = await db
         .select({ name: users.name, email: users.email })

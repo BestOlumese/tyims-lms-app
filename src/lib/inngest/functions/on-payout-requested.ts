@@ -1,6 +1,6 @@
 import { inngest } from "../client";
 import { db } from "@/lib/db";
-import { payoutRequests } from "@/lib/db/schema/payments";
+import { payoutRequests, instructorEarnings } from "@/lib/db/schema/payments";
 import { instructorProfiles } from "@/lib/db/schema/users";
 import { users } from "@/lib/db/schema/users";
 import { paystack } from "@/lib/paystack";
@@ -11,14 +11,16 @@ export const onPayoutRequested = inngest.createFunction(
   {
     id: "on-payout-requested",
     name: "Process Instructor Payout",
-    // Retry up to 3 times with exponential backoff on failure
+    triggers: [{ event: "payout/requested" as const }],
     retries: 3,
   },
-  { event: "payout/requested" },
   async ({ event, step }) => {
-    const { payoutRequestId, instructorId, amount } = event.data;
+    const { payoutRequestId, instructorId, amount } = event.data as {
+      payoutRequestId: string;
+      instructorId: string;
+      amount: number;
+    };
 
-    // Fetch recipient code from instructor profile
     const profile = await step.run("fetch-instructor-profile", async () => {
       const [p] = await db
         .select()
@@ -38,7 +40,6 @@ export const onPayoutRequested = inngest.createFunction(
       return { error: "No recipient code" };
     }
 
-    // Initiate the Paystack transfer
     const transfer = await step.run("initiate-transfer", async () => {
       return paystack.initiateTransfer({
         amountKobo: amount,
@@ -48,7 +49,6 @@ export const onPayoutRequested = inngest.createFunction(
       });
     });
 
-    // Update the payout request with transfer details
     await step.run("update-payout-record", async () => {
       await db
         .update(payoutRequests)
@@ -60,7 +60,6 @@ export const onPayoutRequested = inngest.createFunction(
         .where(eq(payoutRequests.id, payoutRequestId));
     });
 
-    // Notify instructor by email
     await step.run("notify-instructor", async () => {
       const [instructor] = await db
         .select({ name: users.name, email: users.email })

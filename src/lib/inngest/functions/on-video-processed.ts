@@ -6,12 +6,20 @@ import { sendEmail, emailTemplates } from "@/lib/email";
 import { eq } from "drizzle-orm";
 
 export const onVideoProcessed = inngest.createFunction(
-  { id: "on-video-processed", name: "Handle Video Processed" },
-  { event: "video/processed" },
+  {
+    id: "on-video-processed",
+    name: "Handle Video Processed",
+    triggers: [{ event: "video/processed" as const }],
+  },
   async ({ event, step }) => {
-    const { videoId, lessonId, duration, instructorId } = event.data;
+    const { videoId, lessonId, duration, instructorId } = event.data as {
+      videoId: string;
+      lessonId: string;
+      courseId: string;
+      instructorId: string;
+      duration: number;
+    };
 
-    // Update lesson status and duration in the database
     const updatedLesson = await step.run("update-lesson-status", async () => {
       const [lesson] = await db
         .update(lessons)
@@ -21,7 +29,6 @@ export const onVideoProcessed = inngest.createFunction(
       return lesson;
     });
 
-    // Notify the instructor by email
     await step.run("notify-instructor", async () => {
       const [instructor] = await db
         .select({ name: users.name, email: users.email })
@@ -33,13 +40,10 @@ export const onVideoProcessed = inngest.createFunction(
       const template = emailTemplates.videoProcessed({
         instructorName: instructor.name,
         lessonTitle: updatedLesson?.title ?? "Your lesson",
-        courseUrl: `${process.env.NEXT_PUBLIC_APP_URL}/instructor/courses/${event.data.courseId}/curriculum`,
+        courseUrl: `${process.env.NEXT_PUBLIC_APP_URL}/instructor/courses/${(event.data as { courseId: string }).courseId}/curriculum`,
       });
 
-      await sendEmail({
-        to: instructor.email,
-        ...template,
-      });
+      await sendEmail({ to: instructor.email, ...template });
     });
 
     return { lessonId, status: "ready" };

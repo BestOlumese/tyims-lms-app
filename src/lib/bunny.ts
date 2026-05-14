@@ -83,7 +83,7 @@ export const bunny = {
   /** Upload a file (thumbnail, certificate PDF) to Bunny Storage. */
   async uploadToStorage(
     filePath: string,
-    fileBuffer: Buffer,
+    fileBuffer: ArrayBuffer,
     contentType: string
   ): Promise<string> {
     const storageZone = process.env.BUNNY_STORAGE_ZONE!;

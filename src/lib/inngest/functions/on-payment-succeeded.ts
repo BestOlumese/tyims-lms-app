@@ -7,17 +7,25 @@ import { users } from "@/lib/db/schema/users";
 import { sendEmail, emailTemplates } from "@/lib/email";
 import { eq } from "drizzle-orm";
 
-const PLATFORM_FEE_PERCENT = 30; // 30% platform cut
+const PLATFORM_FEE_PERCENT = 30;
 
 export const onPaymentSucceeded = inngest.createFunction(
-  { id: "on-payment-succeeded", name: "Handle Payment Succeeded" },
-  { event: "payment/succeeded" },
+  {
+    id: "on-payment-succeeded",
+    name: "Handle Payment Succeeded",
+    triggers: [{ event: "payment/succeeded" as const }],
+  },
   async ({ event, step }) => {
-    const { paymentId, userId, courseId, amount, type } = event.data;
+    const { paymentId, userId, courseId, amount, type } = event.data as {
+      paymentId: string;
+      userId: string;
+      courseId: string | null;
+      amount: number;
+      type: "course" | "subscription";
+    };
 
     if (type !== "course" || !courseId) return;
 
-    // Create the enrollment record
     const enrollment = await step.run("create-enrollment", async () => {
       const id = crypto.randomUUID();
       const [record] = await db
@@ -28,7 +36,6 @@ export const onPaymentSucceeded = inngest.createFunction(
       return record;
     });
 
-    // Calculate and record instructor earnings
     await step.run("record-instructor-earnings", async () => {
       const [course] = await db
         .select({ instructorId: courses.instructorId })
@@ -50,7 +57,6 @@ export const onPaymentSucceeded = inngest.createFunction(
       });
     });
 
-    // Send confirmation email to the student
     await step.run("send-confirmation-email", async () => {
       const [user] = await db
         .select({ name: users.name, email: users.email })
@@ -58,7 +64,7 @@ export const onPaymentSucceeded = inngest.createFunction(
         .where(eq(users.id, userId));
 
       const [course] = await db
-        .select({ title: courses.title, slug: courses.slug })
+        .select({ title: courses.title })
         .from(courses)
         .where(eq(courses.id, courseId));
 
